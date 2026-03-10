@@ -1,0 +1,43 @@
+const express = require('express');
+const cors = require('cors');
+require('dotenv').config();
+const authRoutes = require('./routes/authRoutes');
+const contactRoutes = require('./routes/contactRoutes');
+const accountRoutes = require('./routes/accountRoutes');
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static('uploads'));
+
+// Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/contact', contactRoutes);
+app.use('/api/account', accountRoutes);
+
+
+// Test Route
+app.get('/', (req, res) => {
+    res.json({
+        error: false,
+        message: 'API is running...',
+        data: {}
+    });
+});
+
+// 404 Global Handler
+app.use((req, res) => {
+    res.status(404).json({
+        error: true,
+        message: 'Route not found',
+        data: {}
+    });
+});
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
