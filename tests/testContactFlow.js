@@ -10,8 +10,8 @@ async function verifyContactFlow() {
         await axios.post(`${baseUrl}/auth/register`, {
             email,
             password,
-            full_name: 'Contact Test User',
-            cpf_cnpj: '987.654.321-00'
+            nomeCompleto: 'Contact Test User',
+            cpfCnpj: '987.654.321-00'
         });
         console.log('✅ Registration successful');
 
@@ -48,5 +48,4 @@ async function verifyContactFlow() {
         process.exit(1);
     }
 }
-
 verifyContactFlow();

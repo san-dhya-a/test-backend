@@ -18,7 +18,7 @@ async function createContactsTable() {
         subject VARCHAR(200),
         message TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
       )
     `;
 

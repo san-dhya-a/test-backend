@@ -1,5 +1,5 @@
 const mysql = require('mysql2/promise');
-require('dotenv').config();
+require('dotenv').config({ debug: true });
 
 async function checkDb() {
     try {
@@ -26,5 +26,4 @@ async function checkDb() {
         console.error('Error:', error);
     }
 }
-
 checkDb();

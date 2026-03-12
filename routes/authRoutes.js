@@ -3,8 +3,11 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const router = express.Router();
+const logJwt = require('../jwt_logger');
 
 const JWT_SECRET = process.env.JWT_SECRET;
+logJwt(`authRoutes Loaded. JWT_SECRET exists: ${!!JWT_SECRET}`);
+if (JWT_SECRET) logJwt(`authRoutes JWT_SECRET starts with: ${JWT_SECRET.substring(0, 3)}...`);
 
 // Debug Endpoints
 router.get('/debug-status', (req, res) => {
@@ -18,40 +21,63 @@ router.post('/debug-body', (req, res) => {
 
 // Register Route
 router.post('/register', async (req, res) => {
+    console.log('--- EXECUTING NEW REGISTER ROUTE ---');
     console.log('Registration request body:', req.body);
     const {
-        cargo, full_name, cpf_cnpj, email, cep, address, house_number,
-        complement, state, city, neighborhood, phone_residential,
-        phone_mobile, gender, password
+        cargo, nomeCompleto, cpfCnpj, email, cep, endereco, numero,
+        complemento, uf, cidade, bairro, telefoneResidencial,
+        telefoneCelular, genero, password
     } = req.body;
 
-    if (!email || !password || !full_name || !cpf_cnpj) {
+    // Standardize variables for DB columns
+    const db_nomeCompleto = nomeCompleto;
+    const db_cpfCnpj = cpfCnpj;
+    const db_endereco = endereco;
+    const db_numero = numero;
+    const db_complemento = complemento;
+    const db_uf = uf;
+    const db_cidade = cidade;
+    const db_bairro = bairro;
+    const db_telefoneResidencial = telefoneResidencial;
+    const db_telefoneCelular = telefoneCelular;
+    const db_genero = genero;
+
+    if (!email || !password || !db_nomeCompleto || !db_cpfCnpj) {
         console.warn('Registration failed: Mandatory fields missing', {
             email: !!email,
             password: !!password,
-            full_name: !!full_name,
-            cpf_cnpj: !!cpf_cnpj
+            nomeCompleto: !!db_nomeCompleto,
+            cpfCnpj: !!db_cpfCnpj
         });
         return res.status(400).json({
             error: true,
-            message: 'Invalid: Mandatory fields missing (email, password, full_name, cpf_cnpj)',
-            data: {}
+            I_AM_REALLY_THE_NEW_REGISTER_ROUTE: true,
+            message: 'Invalid: Mandatory fields missing (email, password, nomeCompleto, cpfCnpj)',
+            data: {
+                missing: {
+                    email: !email,
+                    password: !password,
+                    nomeCompleto: !db_nomeCompleto,
+                    cpfCnpj: !db_cpfCnpj
+                },
+                receivedFields: Object.keys(req.body)
+            }
         });
     }
 
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
         const [result] = await db.execute(
-            `INSERT INTO users (
-                cargo, full_name, cpf_cnpj, email, cep, address, house_number, 
-                complement, state, city, neighborhood, phone_residential, 
-                phone_mobile, gender, password
+            `INSERT INTO user (
+                cargo, nomeCompleto, cpfCnpj, email, cep, endereco, numero, 
+                complemento, uf, cidade, bairro, telefoneResidencial, 
+                telefoneCelular, genero, password
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-                cargo || null, full_name, cpf_cnpj, email, cep || null, address || null,
-                house_number || null, complement || null, state || null, city || null,
-                neighborhood || null, phone_residential || null, phone_mobile || null,
-                gender || null, hashedPassword
+                cargo || null, db_nomeCompleto, db_cpfCnpj, email, cep || null, db_endereco || null,
+                db_numero || null, db_complemento || null, db_uf || null, db_cidade || null,
+                db_bairro || null, db_telefoneResidencial || null, db_telefoneCelular || null,
+                db_genero || null, hashedPassword
             ]
         );
         res.status(201).json({
@@ -92,7 +118,7 @@ router.post('/login', async (req, res) => {
             });
         }
 
-        const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [identifier]);
+        const [rows] = await db.execute('SELECT * FROM user WHERE email = ?', [identifier]);
         console.log('DB rows found:', rows.length);
         const user = rows[0];
 
@@ -118,10 +144,11 @@ router.post('/login', async (req, res) => {
 
         // Generate JWT
         const token = jwt.sign(
-            { userId: user.id, email: user.email, full_name: user.full_name },
+            { userId: user.id, email: user.email, nomeCompleto: user.nomeCompleto },
             JWT_SECRET,
             { expiresIn: '24h' }
         );
+        logJwt(`Generated Token for ${user.email}. Length: ${token.length}. Start: ${token.substring(0, 15)}...`);
 
         // Store token in DB
         await db.execute(

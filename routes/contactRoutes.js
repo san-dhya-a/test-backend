@@ -1,57 +1,33 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
 const db = require('../config/db');
 const router = express.Router();
 
-const JWT_SECRET = process.env.JWT_SECRET;
+// Multer Storage Configuration
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const upload = multer({ storage: storage });
 
 /**
- * Middleware to authenticate JWT token
+ * Public Contact Submission Route
+ * Field mappings: name, email, cpf_cnpj, message, file
  */
-const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    let token = null;
-
-    if (authHeader) {
-        if (authHeader.toLowerCase().startsWith('bearer ')) {
-            token = authHeader.substring(7).trim();
-        } else {
-            token = authHeader.trim();
-        }
-
-        // Remove quotes if present
-        if (token.startsWith('"') && token.endsWith('"')) {
-            token = token.substring(1, token.length - 1);
-        }
-    }
-
-    if (!token) {
-        return res.status(401).json({
-            success: false,
-            message: 'Access denied. No token provided.'
-        });
-    }
-
+router.post('/', upload.single('file'), async (req, res) => {
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        req.user = decoded;
-        next();
-    } catch (error) {
-        console.error('JWT Error in contactRoutes:', error.message);
-        return res.status(403).json({
-            success: false,
-            message: 'Invalid token.'
-        });
-    }
-};
-
-// Contact Submission Route
-router.post('/', authenticateToken, async (req, res) => {
-    try {
-        console.log('Contact submission body:', req.body);
-        const { name, email, phone, subject, message } = req.body;
-        const userId = req.user.userId;
-        console.log(req.body)
+        console.log('--- Contact Submission Start ---');
+        console.log('Body:', req.body);
+        console.log('File:', req.file);
+        const { name, email, cpf_cnpj, message } = req.body;
+        const file = req.file ? req.file.path : null;
 
         if (!name || !email || !message) {
             return res.status(400).json({
@@ -61,8 +37,8 @@ router.post('/', authenticateToken, async (req, res) => {
         }
 
         const [result] = await db.execute(
-            'INSERT INTO contacts (user_id, name, email, phone, subject, message) VALUES (?, ?, ?, ?, ?, ?)',
-            [userId, name, email, phone || null, subject || null, message]
+            'INSERT INTO contacts (name, email, cpf_cnpj, message, file) VALUES (?, ?, ?, ?, ?)',
+            [name, email, cpf_cnpj || null, message, file]
         );
 
         res.json({

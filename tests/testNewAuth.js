@@ -7,19 +7,19 @@ async function testNewAuthFlow() {
 
     const testUser = {
         cargo: 'Developer',
-        full_name: 'Test Instance',
-        cpf_cnpj: '123.456.789-00',
+        nomeCompleto: 'Test Instance',
+        cpfCnpj: '123.456.789-00',
         email: `test_${Date.now()}@example.com`,
         cep: '12345-678',
-        address: 'Main St',
-        house_number: '100',
-        complement: 'Apt 1',
-        state: 'SP',
-        city: 'São Paulo',
-        neighborhood: 'Centro',
-        phone_residential: '(11) 1234-5678',
-        phone_mobile: '(11) 91234-5678',
-        gender: 'Not specified',
+        endereco: 'Main St',
+        numero: '100',
+        complemento: 'Apt 1',
+        uf: 'SP',
+        cidade: 'São Paulo',
+        bairro: 'Centro',
+        telefoneResidencial: '(11) 1234-5678',
+        telefoneCelular: '(11) 91234-5678',
+        genero: 'Not specified',
         password: 'securepassword123'
     };
 
@@ -51,5 +51,4 @@ async function testNewAuthFlow() {
         }
     }
 }
-
 testNewAuthFlow();

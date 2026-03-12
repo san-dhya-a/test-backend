@@ -10,17 +10,17 @@ async function verifyProfile() {
         const regRes = await axios.post(`${baseUrl}/auth/register`, {
             email,
             password,
-            full_name: 'Test User',
-            cpf_cnpj: '123.456.789-00',
+            nomeCompleto: 'Test User',
+            cpfCnpj: '123.456.789-00',
             cargo: 'Developer',
             cep: '12345-678',
-            address: 'Main St',
-            house_number: '100',
-            state: 'SP',
-            city: 'São Paulo',
-            neighborhood: 'Centro',
-            phone_mobile: '99999-9999',
-            gender: 'Non-binary'
+            endereco: 'Main St',
+            numero: '100',
+            uf: 'SP',
+            cidade: 'São Paulo',
+            bairro: 'Centro',
+            telefoneCelular: '99999-9999',
+            genero: 'Non-binary'
         });
         console.log('✅ Registration successful');
 
@@ -40,9 +40,9 @@ async function verifyProfile() {
         console.log('✅ Profile Response:', JSON.stringify(profileRes.data, null, 2));
 
         const expectedFields = [
-            'cargo', 'full_name', 'cpf_cnpj', 'email', 'cep', 'address',
-            'house_number', 'complement', 'state', 'city', 'neighborhood',
-            'phone_residential', 'phone_mobile', 'gender'
+            'cargo', 'nomeCompleto', 'cpfCnpj', 'email', 'cep', 'endereco',
+            'numero', 'complemento', 'uf', 'cidade', 'bairro',
+            'telefoneResidencial', 'telefoneCelular', 'genero'
         ];
 
         const receivedFields = Object.keys(profileRes.data.data);
@@ -54,11 +54,9 @@ async function verifyProfile() {
             console.error('\n❌ FAILURE: Missing fields in response:', missingFields);
             process.exit(1);
         }
-
     } catch (error) {
         console.error('❌ Error during verification:', error.response?.data || error.message);
         process.exit(1);
     }
 }
-
 verifyProfile();

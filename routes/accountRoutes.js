@@ -25,9 +25,7 @@ const storage = multer.diskStorage({
         cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
     }
 });
-
 const upload = multer({ storage: storage });
-
 /**
  * Middleware to authenticate JWT token and validate against DB
  */
@@ -47,7 +45,6 @@ const authenticateToken = async (req, res, next) => {
             token = token.substring(1, token.length - 1);
         }
     }
-
     console.log('Extracted Token (Length: ' + (token ? token.length : 0) + '):', token ? token.substring(0, 15) + '...' : 'null');
 
     if (!token) {
@@ -56,7 +53,6 @@ const authenticateToken = async (req, res, next) => {
             message: 'Access denied. No token provided.'
         });
     }
-
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         console.log('Decoded Token:', decoded);
@@ -73,7 +69,6 @@ const authenticateToken = async (req, res, next) => {
                 message: 'Invalid or expired token.'
             });
         }
-
         req.user = decoded;
         next();
     } catch (error) {
@@ -87,8 +82,6 @@ const authenticateToken = async (req, res, next) => {
         });
     }
 };
-
-
 /**
  * Get Minha Conta profile data
  * Route: GET /api/account/profile
@@ -96,7 +89,7 @@ const authenticateToken = async (req, res, next) => {
 router.get('/profile', authenticateToken, async (req, res) => {
     try {
         const [users] = await db.execute(
-            'SELECT cargo, full_name, cpf_cnpj, email, cep, address, house_number, complement, state, city, neighborhood, phone_residential, phone_mobile, gender FROM users WHERE id = ?',
+            'SELECT cargo, nomeCompleto, cpfCnpj, email, cep, endereco, numero, complemento, uf, cidade, bairro, telefoneResidencial, telefoneCelular, genero FROM user WHERE id = ?',
             [req.user.userId]
         );
 
@@ -107,10 +100,14 @@ router.get('/profile', authenticateToken, async (req, res) => {
             });
         }
 
+        console.log('--- EXECUTING UPDATED PORTUGUESE PROFILE QUERY ---');
+        console.log('DEBUG: DB Result Keys:', Object.keys(users[0]));
+
         res.json({
             success: true,
             data: users[0],
-            message: 'Profile data retrieved successfully'
+            I_AM_THE_CORRECT_VERSION: true,
+            message: 'Profile data retrieved successfully - ' + Date.now()
         });
     } catch (error) {
         console.error('Account profile fetch error:', error);
@@ -146,6 +143,4 @@ router.post('/update-profile', authenticateToken, upload.single('fotoPerfil'), a
         });
     }
 });
-
-
 module.exports = router;
