@@ -138,7 +138,7 @@ router.post('/auth/login', async (req, res) => {
         }
         const token = jwt.sign({ userId: user.id, email: user.email, nomeCompleto: user.nomeCompleto }, JWT_SECRET, { expiresIn: '24h' });
         await db.execute('INSERT INTO user_tokens (user_id, token) VALUES (?, ?)', [user.id, token]);
-        res.json({ error: false, data: { userId: user.id, token, redirectTo: 'Minha Conta' }, message: 'Success' });
+        res.json({ error: false, data: { userId: user.id, token }, message: 'Login Success' });
     } catch (error) {
         res.status(500).json({ error: true, message: 'Server error' });
     }
