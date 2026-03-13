@@ -3,7 +3,6 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const router = express.Router();
-const logJwt = require('../jwt_logger');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
