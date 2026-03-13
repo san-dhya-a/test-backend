@@ -6,172 +6,147 @@ const router = express.Router();
 const logJwt = require('../jwt_logger');
 
 const JWT_SECRET = process.env.JWT_SECRET;
-logJwt(`authRoutes Loaded. JWT_SECRET exists: ${!!JWT_SECRET}`);
-if (JWT_SECRET) logJwt(`authRoutes JWT_SECRET starts with: ${JWT_SECRET.substring(0, 3)}...`);
 
-// Debug Endpoints
-router.get('/debug-status', (req, res) => {
-    res.json({ status: 'OK', message: 'Auth routes are accessible' });
-});
+/**
+ * Profile API - GET/POST /api/profile
+ * Returns all fields from the 'user' table
+ */
+const getProfile = async (req, res) => {
+    try {
+        const email = req.query.email || req.body.email;
+        if (!email) {
+            console.log('[Profile] Missing email in request');
+            return res.status(400).json({
+                error: true,
+                message: 'Invalid: Email is required as a query parameter or in the body'
+            });
+        }
 
-router.post('/debug-body', (req, res) => {
-    console.log('Debug body received:', req.body);
-    res.json({ bodyReceived: !!req.body, keys: Object.keys(req.body || {}) });
-});
+        console.log('[Profile] Fetching for:', email);
+        const [rows] = await db.execute('SELECT * FROM user WHERE email = ?', [email]);
+        const user = rows[0];
 
-// Register Route
-router.post('/register', async (req, res) => {
-    console.log('--- EXECUTING NEW REGISTER ROUTE ---');
-    console.log('Registration request body:', req.body);
-    const {
-        cargo, nomeCompleto, cpfCnpj, email, cep, endereco, numero,
-        complemento, uf, cidade, bairro, telefoneResidencial,
-        telefoneCelular, genero, password
-    } = req.body;
+        if (!user) {
+            console.log('[Profile] User not found:', email);
+            return res.status(404).json({
+                error: true,
+                message: 'User not found'
+            });
+        }
 
-    // Standardize variables for DB columns
-    const db_nomeCompleto = nomeCompleto;
-    const db_cpfCnpj = cpfCnpj;
-    const db_endereco = endereco;
-    const db_numero = numero;
-    const db_complemento = complemento;
-    const db_uf = uf;
-    const db_cidade = cidade;
-    const db_bairro = bairro;
-    const db_telefoneResidencial = telefoneResidencial;
-    const db_telefoneCelular = telefoneCelular;
-    const db_genero = genero;
+        // Security: Remove password
+        delete user.password;
 
-    if (!email || !password || !db_nomeCompleto || !db_cpfCnpj) {
-        console.warn('Registration failed: Mandatory fields missing', {
-            email: !!email,
-            password: !!password,
-            nomeCompleto: !!db_nomeCompleto,
-            cpfCnpj: !!db_cpfCnpj
+        res.json({
+            success: true,
+            data: user,
+            message: 'Success'
         });
-        return res.status(400).json({
+    } catch (error) {
+        console.error('[Profile] Error:', error);
+        res.status(500).json({
             error: true,
-            I_AM_REALLY_THE_NEW_REGISTER_ROUTE: true,
-            message: 'Invalid: Mandatory fields missing (email, password, nomeCompleto, cpfCnpj)',
-            data: {
-                missing: {
-                    email: !email,
-                    password: !password,
-                    nomeCompleto: !db_nomeCompleto,
-                    cpfCnpj: !db_cpfCnpj
-                },
-                receivedFields: Object.keys(req.body)
-            }
+            message: 'Internal server error during profile fetch'
+        });
+    }
+};
+
+// Register routes directly at the top
+router.get('/profile', getProfile);
+router.post('/profile', getProfile);
+router.get('/auth/profile', getProfile);
+router.post('/auth/profile', getProfile);
+
+// Registration and Login
+router.post('/auth/register', async (req, res) => {
+    const { name, nomeCompleto, email, password, ...rest } = req.body;
+    
+    // Support both 'name' and 'nomeCompleto'
+    const finalName = nomeCompleto || name;
+    
+    if (!finalName || !email || !password) {
+        return res.status(400).json({ 
+            error: true, 
+            message: 'Missing required fields: name (or nomeCompleto), email, and password' 
         });
     }
 
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
-        const [result] = await db.execute(
-            `INSERT INTO user (
-                cargo, nomeCompleto, cpfCnpj, email, cep, endereco, numero, 
-                complemento, uf, cidade, bairro, telefoneResidencial, 
-                telefoneCelular, genero, password
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                cargo || null, db_nomeCompleto, db_cpfCnpj, email, cep || null, db_endereco || null,
-                db_numero || null, db_complemento || null, db_uf || null, db_cidade || null,
-                db_bairro || null, db_telefoneResidencial || null, db_telefoneCelular || null,
-                db_genero || null, hashedPassword
-            ]
-        );
-        res.status(201).json({
-            error: false,
-            message: 'Success',
-            data: { userId: result.insertId }
+        
+        // Define all valid columns for the user table (matching user_table_columns.json)
+        const validColumns = [
+            'cargo', 'nomeCompleto', 'cpfCnpj', 'email', 'cep', 'endereco', 
+            'numero', 'complemento', 'uf', 'cidade', 'bairro', 
+            'telefoneResidencial', 'telefoneCelular', 'genero'
+        ];
+
+        const userData = {
+            nomeCompleto: finalName,
+            email,
+            password: hashedPassword,
+            ...rest
+        };
+
+        // Sanitize CPF and CEP (remove extra spaces)
+        if (userData.cpfCnpj) {
+            userData.cpfCnpj = userData.cpfCnpj.replace(/\s+/g, '').trim();
+        }
+        if (userData.cep) {
+            userData.cep = userData.cep.replace(/\s+/g, '').trim();
+        }
+
+        // Filter provided data to only include valid columns
+        const filteredData = Object.keys(userData)
+            .filter(key => validColumns.includes(key))
+            .reduce((obj, key) => {
+                obj[key] = userData[key];
+                return obj;
+            }, {});
+
+        // Build dynamic query
+        const columns = ['password', ...Object.keys(filteredData)];
+        const values = [hashedPassword, ...Object.values(filteredData)];
+        const placeholders = columns.map(() => '?').join(', ');
+
+        const query = `INSERT INTO user (${columns.join(', ')}) VALUES (${placeholders})`;
+        
+        console.log('[Register] Executing query:', query);
+        const [result] = await db.execute(query, values);
+        
+        res.status(201).json({ 
+            error: false, 
+            message: 'Success', 
+            data: { userId: result.insertId } 
         });
     } catch (error) {
+        console.error('[Register] Error:', error);
         if (error.code === 'ER_DUP_ENTRY') {
-            return res.json({
-                error: true,
-                message: 'Invalid: Email already exists',
-                data: {}
-            });
+            return res.status(400).json({ error: true, message: 'Email already exists' });
         }
-        console.error('Registration error:', error);
-        res.status(500).json({
-            error: true,
-            message: 'Error',
-            data: {}
-        });
+        res.status(500).json({ error: true, message: 'Server error' });
     }
 });
 
-// Login Route
-router.post('/login', async (req, res) => {
+router.post('/auth/login', async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: true, message: 'Missing fields' });
     try {
-        console.log('Login attempt body:', req.body);
-        const identifier = req.body?.email;
-        const password = req.body?.password;
-
-        if (!identifier || !password) {
-            console.log('Missing identifier or password');
-            return res.status(401).json({
-                error: true,
-                data: { email: identifier || '' },
-                message: 'Invalid credentials'
-            });
-        }
-
-        const [rows] = await db.execute('SELECT * FROM user WHERE email = ?', [identifier]);
-        console.log('DB rows found:', rows.length);
+        const [rows] = await db.execute('SELECT * FROM user WHERE email = ?', [email]);
         const user = rows[0];
-
-        if (!user) {
-            console.log('User not found in DB');
-            return res.status(401).json({
-                error: true,
-                data: { email: identifier },
-                message: 'Invalid credentials'
-            });
+        if (!user || !(await bcrypt.compare(password, user.password))) {
+            return res.status(401).json({ error: true, message: 'Invalid credentials' });
         }
-
-        const isMatch = await bcrypt.compare(password, user.password);
-        console.log('Password match:', isMatch);
-
-        if (!isMatch) {
-            return res.status(401).json({
-                error: true,
-                data: { email: identifier },
-                message: 'Invalid credentials'
-            });
-        }
-
-        // Generate JWT
-        const token = jwt.sign(
-            { userId: user.id, email: user.email, nomeCompleto: user.nomeCompleto },
-            JWT_SECRET,
-            { expiresIn: '24h' }
-        );
-        logJwt(`Generated Token for ${user.email}. Length: ${token.length}. Start: ${token.substring(0, 15)}...`);
-
-        // Store token in DB
-        await db.execute(
-            'INSERT INTO user_tokens (user_id, token) VALUES (?, ?)',
-            [user.id, token]
-        );
-
-        res.json({
-            error: false,
-            data: {
-                userId: user.id,
-                token: token
-            },
-            message: 'Success'
-        });
+        const token = jwt.sign({ userId: user.id, email: user.email, nomeCompleto: user.nomeCompleto }, JWT_SECRET, { expiresIn: '24h' });
+        await db.execute('INSERT INTO user_tokens (user_id, token) VALUES (?, ?)', [user.id, token]);
+        res.json({ error: false, data: { userId: user.id, token, redirectTo: 'Minha Conta' }, message: 'Success' });
     } catch (error) {
-        console.error('Login error:', error);
-        res.status(500).json({
-            error: true,
-            data: {},
-            message: 'Internal server error during login'
-        });
+        res.status(500).json({ error: true, message: 'Server error' });
     }
 });
+
+// Legacy redirects
+router.post('/register', (req, res) => res.redirect(307, '/api/auth/register'));
+router.post('/login', (req, res) => res.redirect(307, '/api/auth/login'));
 
 module.exports = router;

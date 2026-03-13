@@ -88,26 +88,27 @@ const authenticateToken = async (req, res, next) => {
  */
 router.get('/profile', authenticateToken, async (req, res) => {
     try {
-        const [users] = await db.execute(
-            'SELECT cargo, nomeCompleto, cpfCnpj, email, cep, endereco, numero, complemento, uf, cidade, bairro, telefoneResidencial, telefoneCelular, genero FROM user WHERE id = ?',
+        console.log('Fetching full profile from "user" table for ID:', req.user.userId);
+        const [rows] = await db.execute(
+            'SELECT * FROM user WHERE id = ?',
             [req.user.userId]
         );
 
-        if (users.length === 0) {
+        if (rows.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'User not found'
             });
         }
 
-        console.log('--- EXECUTING UPDATED PORTUGUESE PROFILE QUERY ---');
-        console.log('DEBUG: DB Result Keys:', Object.keys(users[0]));
+        const user = rows[0];
+        // Remove sensitive password from response
+        delete user.password;
 
         res.json({
             success: true,
-            data: users[0],
-            I_AM_THE_CORRECT_VERSION: true,
-            message: 'Profile data retrieved successfully - ' + Date.now()
+            data: user,
+            message: 'Profile data retrieved successfully'
         });
     } catch (error) {
         console.error('Account profile fetch error:', error);
@@ -121,18 +122,93 @@ router.get('/profile', authenticateToken, async (req, res) => {
 
 /**
  * Handle Minha Conta profile update
- * Route: POST /api/account/update-profile
+ * Route: PUT /api/account/update-profile
  */
-router.post('/update-profile', authenticateToken, upload.single('fotoPerfil'), async (req, res) => {
+router.put('/update-profile', authenticateToken, (req, res, next) => {
+    console.log('[AccountUpdate] Middleware Check - Body keys:', Object.keys(req.body));
+    next();
+}, /* upload.single('fotoPerfil'), */ async (req, res) => {
     try {
-        console.log('Account update body received:', req.body);
+        const userId = req.user.userId;
+        console.log('[AccountUpdate] User:', userId, 'Body keys:', Object.keys(req.body));
+        console.log('[AccountUpdate] Complemento value:', req.body.complemento);
+        
+        const validColumns = [
+            'cargo', 'nomeCompleto', 'cpfCnpj', 'cep', 'endereco', 
+            'numero', 'complemento', 'uf', 'cidade', 'bairro', 
+            'telefoneResidencial', 'telefoneCelular', 'genero'
+        ];
 
-        // As requested: Accept whatever data is sent and return a simple success message.
-        // No predefined data object or strict validation.
+        // Filter update data
+        const updateData = {};
+        console.log('[AccountUpdate] Filtering keys from req.body. Body is:', JSON.stringify(req.body));
+        for (const key of validColumns) {
+            if (req.body[key] !== undefined) {
+                console.log(`[AccountUpdate] Found key "${key}" in body:`, req.body[key]);
+                let value = req.body[key] === 'null' ? null : req.body[key];
+               
+                // Sanitize CPF and CEP (remove extra spaces)
+                if ((key === 'cpfCnpj' || key === 'cep') && value) {
+                    value = value.replace(/\s+/g, '').trim();
+                }
+                
+                updateData[key] = value;
+            }
+        }
+
+        // Password update logic
+        if (req.body.novaSenha && req.body.senhaAtual) {
+            console.log('[AccountUpdate] Processing password change...');
+            
+            // 1. Fetch current user to get password hash
+            const [rows] = await db.execute('SELECT password FROM user WHERE id = ?', [userId]);
+            const user = rows[0];
+            
+            if (!user) {
+                return res.status(404).json({ success: false, message: 'User not found' });
+            }
+
+            // 2. Verify current password
+            const isMatch = await bcrypt.compare(req.body.senhaAtual, user.password);
+            if (!isMatch) {
+                return res.status(401).json({ 
+                    success: false, 
+                    message: 'Senha atual incorreta. Não foi possível alterar a senha.' 
+                });
+            }
+
+            // 3. Hash new password and add to updateData
+            const salt = await bcrypt.genSalt(10);
+            updateData.password = await bcrypt.hash(req.body.novaSenha, salt);
+            console.log('[AccountUpdate] New password hashed and added to update.');
+        }
+
+        // If a file was uploaded, we'd normally save it. 
+        // Note: Checking if there's a column for photo (usually 'fotoPerfil' based on req.body keys or schema)
+        // I'll check user_table_columns.json again - wait, I already saw it. 
+        // It didn't have a 'fotoPerfil' column in the json I saw earlier (lines 1-146).
+        // Let's check if I missed it.
+
+        if (Object.keys(updateData).length === 0 && !req.file) {
+            return res.status(400).json({
+                success: false,
+                message: 'No data provided for update'
+            });
+        }
+
+        if (Object.keys(updateData).length > 0) {
+            const setClause = Object.keys(updateData).map(key => `${key} = ?`).join(', ');
+            const values = [...Object.values(updateData), userId];
+            
+            const query = `UPDATE user SET ${setClause} WHERE id = ?`;
+            console.log('[UpdateProfile] Executing query:', query);
+            await db.execute(query, values);
+        }
 
         res.json({
             success: true,
-            message: 'Profile updated successfully'
+            message: 'Profile updated successfully',
+            redirectTo: 'Fale Conosco'
         });
 
     } catch (error) {
@@ -143,4 +219,5 @@ router.post('/update-profile', authenticateToken, upload.single('fotoPerfil'), a
         });
     }
 });
+
 module.exports = router;

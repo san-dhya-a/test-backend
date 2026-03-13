@@ -45,7 +45,7 @@ async function testNewAuthFlow() {
 
     } catch (error) {
         if (error.response) {
-            console.error('❌ Test Failed:', error.response.status, error.response.data);
+            console.error('❌ Test Failed:', error.response.status, JSON.stringify(error.response.data, null, 2));
         } else {
             console.error('❌ Test Error:', error.message);
         }
